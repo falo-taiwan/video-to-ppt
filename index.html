@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video to PPT - Cloudflare Serverless 版</title>
+    
+    <!-- CSS 樣式 -->
+    <link rel="stylesheet" href="index.css">
+    
+    <!-- 引入 Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- 引入 jsPDF & JSZip CDN，用於本機端打包導出 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+
+    <header>
+        <div>
+            <h1>🎬 Video to PPT <span class="version-badge">v2.07</span></h1>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; font-size: 13px;">
+            <a href="chrome-extension.zip" download="chrome-extension.zip" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-weight: 500; transition: all 0.2s;" onmouseover="this.style.background='rgba(56,189,248,0.25)'" onmouseout="this.style.background='rgba(56,189,248,0.15)'">📦 下載 Chrome 外掛套件包</a>
+        </div>
+    </header>
+
+    <div class="main-layout">
+        <!-- 左側主工作區 -->
+        <div class="workspace-left">
+            
+            <!-- 檔案拖曳上傳卡片 -->
+            <div id="upload-card" class="glass-card">
+                <h2>📥 載入影片進行分析</h2>
+                <div id="drop-zone" class="upload-zone">
+                    <div class="upload-icon">🎥</div>
+                    <div class="upload-text">將影片拖曳至此處，或點擊選擇檔案</div>
+                    <div class="upload-subtext">支援 MP4, WebM 等瀏覽器原生支援之影片格式</div>
+                </div>
+                <input type="file" id="video-file-input" accept="video/mp4,video/webm">
+                
+                <div style="margin-top: 16px; border-top: 1px dashed var(--card-border); padding-top: 16px;">
+                    <div style="font-size: 13px; margin-bottom: 6px; font-weight: 500; text-align: left;">🌐 或者輸入 YouTube 影片網址 (⚠️ 因 YouTube 限制雲端 IP，建議下載 MP4 後拖入分析)：</div>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="yt-url-input" style="flex: 1; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); border-radius: 6px; padding: 8px; color: #fff; font-size: 13px;" value="https://www.youtube.com/watch?v=L5LLzXrKFIY" placeholder="例如 https://www.youtube.com/watch?v=...">
+                        <button id="btn-load-yt" class="btn btn-primary" style="padding: 0 16px; font-size: 13px; white-space: nowrap;">載入影片</button>
+                        <button id="btn-download-yt-video" class="btn btn-secondary" style="display: none; padding: 0 16px; font-size: 13px; white-space: nowrap; background: #2563eb; color: #fff; border-color: #2563eb;">📥 下載影片</button>
+                    </div>
+                    <div id="yt-loading-status" style="font-size: 11px; color: var(--accent-glow); margin-top: 6px; text-align: left; display: none;">正在解析 YouTube 邊緣串流，請稍候...</div>
+                </div>
+            </div>
+
+            <!-- 分析控制工作區 -->
+            <div id="analysis-card" class="glass-card" style="display: none;">
+                <h2 id="video-title-header">影片分析控制台</h2>
+                
+                <div class="analysis-workspace">
+                    <!-- 影片播放預覽 -->
+                    <div class="video-preview-wrapper" style="position: relative; overflow: hidden; border-radius: 8px;">
+                        <video id="main-video" style="width: 100%; display: block;" controls muted></video>
+                        <div id="video-scanning-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; box-shadow: inset 0 0 24px rgba(56, 189, 248, 0.2);">
+                            <div style="position: absolute; width: 100%; height: 3px; background: linear-gradient(90deg, transparent, #38bdf8, #38bdf8, transparent); box-shadow: 0 0 10px #38bdf8; animation: scanLine 2.5s ease-in-out infinite; top: 0;"></div>
+                        </div>
+                    </div>
+
+                    <!-- 控制選項與按鈕 -->
+                    <div class="controls-row">
+                        <div class="input-group">
+                            <span>任務名稱:</span>
+                            <input type="text" id="task-title-input" style="width: 180px;" placeholder="輸入投影片名稱...">
+                        </div>
+                        
+                        <div class="input-group">
+                            <span>換頁閾值:</span>
+                            <input type="number" id="threshold-input" value="8.0" min="1.0" max="100.0" step="0.5" style="width: 70px;">
+                            <span>MAE</span>
+                        </div>
+
+                        <div class="input-group">
+                            <span>分析間隔:</span>
+                            <input type="number" id="interval-input" value="1.0" min="0.1" step="0.1" style="width: 70px;">
+                            <span>秒</span>
+                        </div>
+
+                        <div style="margin-left: auto; display: flex; gap: 8px;">
+                            <button id="btn-start-analysis" class="btn btn-primary">⚡ 開始本機分析</button>
+                            <button id="btn-stop-analysis" class="btn btn-danger" style="display: none;">🛑 停止</button>
+                        </div>
+                    </div>
+
+                    <!-- 隱藏的分析畫布（用於計算 MAE 及截圖） -->
+                    <canvas id="analysis-canvas" style="display: none;"></canvas>
+
+                    <!-- 分析進度列 -->
+                    <div id="progress-card" class="progress-area" style="display: none;">
+                        <div class="progress-text">
+                            <span id="analysis-status-text">準備分析中...</span>
+                            <span>已擷取: <strong id="captured-count-badge" style="color: var(--accent-green);">0</strong> 張投影片</span>
+                        </div>
+                        <div class="progress-bar-wrapper">
+                            <div id="progress-bar-fill" class="progress-bar-fill"></div>
+                        </div>
+                        
+                        <!-- 實時分析日誌 (v2.06) -->
+                        <div id="analysis-log-console" style="display: none; height: 120px; max-height: 120px; overflow-y: auto; background: rgba(5, 8, 16, 0.75); border: 1px solid var(--card-border); padding: 10px; border-radius: 6px; color: #a3e635; font-family: 'Courier New', Courier, monospace; font-size: 11px; line-height: 1.6; margin-top: 12px; text-align: left; box-shadow: inset 0 0 10px rgba(0,0,0,0.5);"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 投影片畫廊展示 -->
+            <div id="gallery-card" class="glass-card gallery-section" style="display: none;">
+                <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <h2 id="gallery-title" style="margin: 0;">📸 擷取投影片畫廊</h2>
+                        <div style="display: flex; gap: 6px;">
+                            <button id="btn-select-all" class="btn" style="padding: 4px 10px; font-size: 11px; background: rgba(56, 189, 248, 0.15); border: 1px solid var(--accent-blue); color: var(--accent-blue); border-radius: 4px; cursor: pointer;">全選</button>
+                            <button id="btn-deselect-all" class="btn" style="padding: 4px 10px; font-size: 11px; background: rgba(248, 113, 113, 0.15); border: 1px solid var(--accent-red); color: var(--accent-red); border-radius: 4px; cursor: pointer;">清除</button>
+                            <button id="btn-clear-memory" class="btn" style="padding: 4px 10px; font-size: 11px; background: rgba(156, 163, 175, 0.15); border: 1px solid #9ca3af; color: #9ca3af; border-radius: 4px; cursor: pointer;">🧹 釋放本機快取</button>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <div class="input-group">
+                            <span>PDF 規格:</span>
+                            <select id="pdf-res-select" style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); color: var(--text-primary); border-radius: 6px; padding: 4px 8px; font-size: 12px; outline: none; cursor: pointer;">
+                                <option value="original" selected>原圖解析度</option>
+                                <option value="1080">1080p (等比例)</option>
+                                <option value="720">720p (等比例)</option>
+                            </select>
+                        </div>
+                        <button id="btn-export-pdf" class="btn btn-secondary">📄 匯出 PDF</button>
+                        <button id="btn-export-zip" class="btn btn-secondary">📦 導出 ZIP 圖包</button>
+                        <button id="btn-export-html" class="btn btn-secondary">🌐 導出本機 HTML</button>
+                        <button id="btn-export-json" class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; background: #2563eb; border-color: #2563eb;">💾 導出本機 JSON</button>
+                    </div>
+                </div>
+                <div id="gallery-grid" class="gallery-grid">
+                    <!-- 投影片項目會由 index.js 動態生成 -->
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 前端核心 JavaScript -->
+    <script src="index.js"></script>
+</body>
+</html>
