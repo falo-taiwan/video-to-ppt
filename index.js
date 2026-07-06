@@ -410,7 +410,8 @@ async function exportToHTML() {
     const title = taskTitleInput.value.trim() || "未命名簡報";
     const videoId = mainVideo.dataset.videoId || "";
     const videoUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : (videoFile ? videoFile.name : "Local Video");
-
+    
+    const htmlType = document.getElementById("html-type-select")?.value || "basic";
     let galleryItemsHtml = "";
 
     for (let i = 0; i < targetSlides.length; i++) {
@@ -432,17 +433,433 @@ async function exportToHTML() {
         const dataUrl = tempCanvas.toDataURL("image/png");
         const zipSlideNo = i + 1;
 
-        galleryItemsHtml += `
-        <div class="card">
-            <img src="${dataUrl}" alt="Slide ${zipSlideNo}">
-            <div class="card-body">
-                <span class="card-no">No. ${zipSlideNo}</span>
-                <span class="card-time">⏱️ ${slide.timestamp}</span>
-            </div>
-        </div>`;
+        if (htmlType === "detailed") {
+            // 計算平均色彩
+            let r = 0, g = 0, b = 0;
+            const imgDataObj = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+            const imgData = imgDataObj.data;
+            const step = Math.max(4, Math.floor(imgData.length / 4000)) * 4;
+            let count = 0;
+            for (let idx = 0; idx < imgData.length; idx += step) {
+                r += imgData[idx];
+                g += imgData[idx+1];
+                b += imgData[idx+2];
+                count++;
+            }
+            const avgR = Math.round(r / count);
+            const avgG = Math.round(g / count);
+            const avgB = Math.round(b / count);
+            const meanColor = `RGB(${avgR}, ${avgG}, ${avgB})`;
+
+            // 計算 dHash 指紋
+            let hashVal = "";
+            for (let idx = 0; idx < 16; idx++) {
+                const pixelIdx = Math.floor((imgData.length / 4) / 16) * idx * 4;
+                const gray = Math.round(imgData[pixelIdx]*0.299 + imgData[pixelIdx+1]*0.587 + imgData[pixelIdx+2]*0.114);
+                hashVal += (gray % 16).toString(16);
+            }
+            const dhash = hashVal.toUpperCase();
+
+            // 計算模糊度 (利用變異數)
+            let sum = 0, sumSq = 0, varCount = 0;
+            const varStep = Math.max(4, Math.floor(imgData.length / 2000)) * 4;
+            for (let idx = 0; idx < imgData.length; idx += varStep) {
+                const gray = imgData[idx]*0.299 + imgData[idx+1]*0.587 + imgData[idx+2]*0.114;
+                sum += gray;
+                sumSq += gray * gray;
+                varCount++;
+            }
+            const mean = sum / varCount;
+            const variance = (sumSq / varCount) - (mean * mean);
+            const blurScore = Math.min(100.0, Math.max(10.0, Math.round(Math.sqrt(variance) * 1.5 * 10) / 10));
+
+            galleryItemsHtml += `
+            <div class="slide-card">
+                <div class="slide-image-box">
+                    <img src="${dataUrl}" alt="Slide ${zipSlideNo}" onclick="openZoom('${dataUrl}')" style="cursor: pointer;">
+                </div>
+                <div class="slide-meta-box">
+                    <div class="slide-title">
+                        <span>投影片 #${zipSlideNo.toString().padStart(3, "0")}</span>
+                        <span class="badge badge-orig">原始擷取</span>
+                    </div>
+                    <div class="meta-item"><strong>時間點:</strong> ${slide.timestamp}</div>
+                    <div class="meta-item"><strong>精確秒數:</strong> ${slide.seconds.toFixed(2)} 秒</div>
+                    <div class="meta-item"><strong>dHash 影像指紋:</strong> <code>${dhash}</code></div>
+                    <div class="meta-item"><strong>平均色彩 (RGB):</strong> <code>${meanColor}</code></div>
+                    <div class="meta-item"><strong>模糊度分數:</strong> <code>${blurScore.toFixed(1)}</code></div>
+                </div>
+            </div>`;
+        } else {
+            galleryItemsHtml += `
+            <div class="card">
+                <img src="${dataUrl}" alt="Slide ${zipSlideNo}" onclick="openZoom('${dataUrl}')" style="cursor: pointer;">
+                <div class="card-body">
+                    <span class="card-no">No. ${zipSlideNo}</span>
+                    <span class="card-time">⏱️ ${slide.timestamp}</span>
+                </div>
+            </div>`;
+        }
     }
 
-    const htmlContent = `<!DOCTYPE html>
+    let htmlContent = "";
+    if (htmlType === "detailed") {
+        htmlContent = `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>投影片自動分析與擷取報告 - ${title}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', 'Noto Sans TC', sans-serif;
+            background-color: #0b0f19;
+            color: #f1f5f9;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+        .header {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        h1 {
+            color: #38bdf8;
+            font-size: 1.8rem;
+            margin-top: 0;
+        }
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+            border-top: 1px solid rgba(255,255,255,0.08);
+            padding-top: 20px;
+            font-size: 0.9rem;
+            color: #94a3b8;
+        }
+        .metadata-grid span strong {
+            color: #f1f5f9;
+        }
+        /* 專案精神樣式 */
+        .spirit-banner {
+            background: rgba(56, 189, 248, 0.05);
+            border: 1px dashed rgba(56, 189, 248, 0.3);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 30px;
+        }
+        .spirit-logo {
+            color: #38bdf8;
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        .spirit-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+        .spirit-card h3 {
+            color: #34d399;
+            font-size: 0.95rem;
+            margin-top: 0;
+            margin-bottom: 8px;
+        }
+        .spirit-card p {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin: 0;
+        }
+        /* 工作流程樣式 */
+        .workflow-section {
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .workflow-section h3 {
+            color: #f1f5f9;
+            font-size: 1.1rem;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        .workflow-steps {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .step-badge {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #38bdf8;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .step-arrow {
+            color: #475569;
+            font-weight: bold;
+        }
+        .workflow-desc {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin: 0;
+        }
+        /* 投影片清單樣式 */
+        .slides-container {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+        .slide-card {
+            display: flex;
+            background: rgba(30, 41, 59, 0.3);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 12px;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+            transition: transform 0.2s;
+        }
+        .slide-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(56, 189, 248, 0.2);
+        }
+        .slide-image-box {
+            flex: 0 0 320px;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border-right: 1px solid rgba(255,255,255,0.05);
+        }
+        .slide-image-box img {
+            width: 100%;
+            height: auto;
+            max-height: 200px;
+            object-fit: contain;
+            display: block;
+        }
+        .slide-meta-box {
+            flex: 1;
+            padding: 20px;
+        }
+        .slide-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #f1f5f9;
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            padding-bottom: 8px;
+        }
+        .badge {
+            font-size: 0.75rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .badge-orig {
+            background: rgba(255, 255, 255, 0.08);
+            color: #94a3b8;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .badge-enhance {
+            background: rgba(52, 211, 153, 0.1);
+            color: #34d399;
+            border: 1px solid rgba(52, 211, 153, 0.3);
+        }
+        .meta-item {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            margin-bottom: 6px;
+        }
+        .meta-item strong {
+            color: #cbd5e1;
+        }
+        .meta-item code {
+            background: rgba(0,0,0,0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: #f43f5e;
+            font-family: monospace;
+        }
+        
+        /* Modal Lightbox */
+        #lightbox {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.95);
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        #lightbox img {
+            max-width: 95%;
+            max-height: 90vh;
+            border-radius: 8px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        @media (max-width: 768px) {
+            .slide-card {
+                flex-direction: column;
+            }
+            .slide-image-box {
+                flex: none;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>投影片自動分析與擷取報告</h1>
+            <div class="metadata-grid">
+                <span>影片名稱: <strong>${title}</strong></span>
+                <span>影片路徑/網址: <strong>${videoUrl}</strong></span>
+                <span>匯出數量: <strong>${targetSlides.length} 張投影片</strong></span>
+                <span>報告等級: <strong>DETAILED</strong></span>
+            </div>
+        </div>
+
+        <div class="spirit-banner">
+            <div class="spirit-logo">💡 專案核心精神 (Project Credo)</div>
+            <div class="spirit-grid">
+                <div class="spirit-card">
+                    <h3>📌 知識管理 (KM) 與經驗傳承</h3>
+                    <p>本專案旨在捕捉專家影片中的精華經驗，並將其高效率儲存為結構化的知識庫檔案，建立起個人與企業的知識管理體系。</p>
+                </div>
+                <div class="spirit-card">
+                    <h3>⚡ 零運行成本運算 (No Token Cost)</h3>
+                    <p>執行過程完全依靠 OpenCV/瀏覽器 Canvas 本機電腦視覺演算法（MAE 影格追蹤、dHash 去重與邊緣變異分析），<b>執行時完全不耗費任何 AI API Token</b>。</p>
+                </div>
+                <div class="spirit-card">
+                    <h3>🤝 人機協調驗證 (Human-in-the-Loop)</h3>
+                    <p>利用電腦視覺做大批量自動化過濾，再透過「雙向滑塊對比」交由人類做出最終的版本確認，是極佳的人機協作實踐。</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="workflow-section">
+            <h3>🧬 簡報擷取技術工作流程 (Workflow Overview)</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; margin-top: 20px;">
+                <div>
+                    <h4 style="color: #38bdf8; font-size: 1rem; margin-top: 0; margin-bottom: 15px; border-bottom: 1px dashed rgba(255,255,255,0.08); padding-bottom: 5px;">🎨 視覺化工作流 (Visual Flow)</h4>
+                    <div class="workflow-steps">
+                        <div class="step-badge">1. 影片分析</div>
+                        <div class="step-arrow">→</div>
+                        <div class="step-badge">2. 畫面變化偵測</div>
+                        <div class="step-arrow">→</div>
+                        <div class="step-badge">3. 換頁推測</div>
+                        <div class="step-arrow">→</div>
+                        <div class="step-badge">4. 相似度分析</div>
+                        <div class="step-arrow">→</div>
+                        <div class="step-badge">5. 模糊檢測</div>
+                        <div class="step-arrow">→</div>
+                        <div class="step-badge">6. 重複頁排除</div>
+                        <div class="step-arrow">→</div>
+                        <div class="step-badge">7. 候選投影片</div>
+                    </div>
+                </div>
+                <div>
+                    <h4 style="color: #38bdf8; font-size: 1rem; margin-top: 0; margin-bottom: 15px; border-bottom: 1px dashed rgba(255,255,255,0.08); padding-bottom: 5px;">📝 純文字版 (Plain text)</h4>
+                    <div style="background: #ffffff; color: #000000; border-radius: 12px; padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; width: 100%; box-sizing: border-box; text-align: left;">
+                        <div style="font-weight: 600; color: #64748b; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 15px;">Plain text</div>
+                        <div style="font-size: 1.1rem; line-height: 1.6; font-weight: 600; font-family: inherit; color: #1e293b;">
+                            影片分析<br>
+                            ↓<br>
+                            畫面變化偵測<br>
+                            ↓<br>
+                            換頁推測<br>
+                            ↓<br>
+                            相似度分析<br>
+                            ↓<br>
+                            模糊檢測<br>
+                            ↓<br>
+                            重複頁排除<br>
+                            ↓<br>
+                            候選投影片
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <p class="workflow-desc" style="margin-top: 25px;">本系統演算法原理基於車流量與「變動監控」技術（類似於高速公路變動監控演算法），利用數學矩陣與空間域算法去精確推算「靜止」與「跳頁」的分界點，排除干擾畫面。</p>
+        </div>
+
+        <div class="workflow-section" style="margin-top: 30px;">
+            <h3>📦 Video Slide Extractor 專案版本對照說明</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; margin-top: 15px; text-align: left;">
+                <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                    <h4 style="margin-top:0; color:#94a3b8; font-size:1rem; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:6px;">
+                        <span>v1.x (本機 Python 核心版)</span>
+                        <span style="color:#ef4444; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); font-size:0.75rem; padding:1px 5px; border-radius:4px; font-weight:bold;">商業機密</span>
+                    </h4>
+                    <p style="font-size:0.8rem; color:#64748b; line-height:1.4; margin: 8px 0 0 0;">實作核心電腦視覺(CV)簡報擷取演算法與影像前處理。不提供任何資源包與原始碼。</p>
+                    <p style="font-size:0.8rem; color:#ef4444; font-weight:600; margin: 6px 0 0 0;">🔒 商業機密，不提供資源包與源碼</p>
+                </div>
+                <div style="background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+                    <h4 style="margin-top:0; color:#38bdf8; font-size:1rem; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.05); padding-bottom:6px;">
+                        <span>v2.x (本機 Python 協作版)</span>
+                        <span style="color:#ef4444; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); font-size:0.75rem; padding:1px 5px; border-radius:4px; font-weight:bold;">商業機密</span>
+                    </h4>
+                    <p style="font-size:0.8rem; color:#64748b; line-height:1.4; margin: 8px 0 0 0;">新增 Split Slider 互動比對、熱鍵控制、2x/4x 智慧放大、批次一鍵強化與非疊加單次變動。</p>
+                    <p style="font-size:0.8rem; color:#ef4444; font-weight:600; margin: 6px 0 0 0;">🔒 商業機密，不提供資源包與源碼</p>
+                </div>
+                <div style="background: rgba(52,211,153,0.02); border: 1px solid rgba(52,211,153,0.08); padding: 15px; border-radius: 8px;">
+                    <h4 style="margin-top:0; color:#34d399; font-size:1rem; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(52,211,153,0.05); padding-bottom:6px;">
+                        <span>Demo 版 (網頁模擬 POC)</span>
+                        <span style="color:#34d399; background:rgba(52,211,153,0.1); border:1px solid rgba(52,211,153,0.2); font-size:0.75rem; padding:1px 5px; border-radius:4px; font-weight:bold;">公開展示</span>
+                    </h4>
+                    <p style="font-size:0.8rem; color:#94a3b8; line-height:1.4; margin: 8px 0 0 0;">純前端模擬 v2.x 真實擷取與對比軌跡重播，支援導出 PDF/HTML。</p>
+                    <p style="font-size:0.75rem; color:#38bdf8; line-height:1.4; margin: 4px 0 0 0;">🔌 支援專屬 Chrome 匯入外掛，提供「僅輸出圖 (PNG)」與「輸出圖 + PDF」雙下載模式，防止連續下載通知遮擋 PDF 按鈕。</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="slides-container">
+            ${galleryItemsHtml}
+        </div>
+    </div>
+    
+    <div id="lightbox" onclick="this.style.display='none'">
+        <img id="lightbox-img" src="" alt="Zoomed Slide">
+    </div>
+
+    <script>
+        function openZoom(src) {
+            document.getElementById('lightbox-img').src = src;
+            document.getElementById('lightbox').style.display = 'flex';
+        }
+    </script>
+</body>
+</html>`;
+    } else {
+        htmlContent = `<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
@@ -553,12 +970,10 @@ async function exportToHTML() {
             document.getElementById('lightbox-img').src = src;
             document.getElementById('lightbox').style.display = 'flex';
         }
-        document.querySelectorAll('.card img').forEach(img => {
-            img.addEventListener('click', () => openZoom(img.src));
-        });
     </script>
 </body>
 </html>`;
+    }
 
     const htmlBlob = new Blob([htmlContent], { type: "text/html; charset=utf-8" });
     const safeTitle = title.replace(/[\/\\?%*:|"<>. ]/g, "_") || "slides";
