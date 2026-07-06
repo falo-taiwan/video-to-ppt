@@ -392,15 +392,16 @@ function setupExportButtons() {
 }
 
 async function exportToHTML() {
-    // 獲取勾選的投影片
-    const checkedCbs = document.querySelectorAll(".slide-select-checkbox:checked");
-    const checkedNos = Array.from(checkedCbs).map(cb => parseInt(cb.dataset.slideNo, 10));
-    const targetSlides = slideCandidates.filter(s => checkedNos.includes(s.slide_no));
+    try {
+        // 獲取勾選的投影片
+        const checkedCbs = document.querySelectorAll(".slide-select-checkbox:checked");
+        const checkedNos = Array.from(checkedCbs).map(cb => parseInt(cb.getAttribute("data-slide-no"), 10));
+        const targetSlides = slideCandidates.filter(s => checkedNos.includes(s.slide_no));
 
-    if (targetSlides.length === 0) {
-        alert("請至少勾選一張投影片以生成離線 HTML！");
-        return;
-    }
+        if (targetSlides.length === 0) {
+            alert("請至少勾選一張投影片以生成離線 HTML！");
+            return;
+        }
 
     addAnalysisLog("🌐 正在生成單一檔案離線 HTML，請稍候...");
 
@@ -567,17 +568,22 @@ async function exportToHTML() {
     
     addAnalysisLog(`✅ <span style="color: #34d399; font-weight: bold;">單一檔案離線 HTML 導出成功！(含全部 Base64 內嵌影格)</span>`);
     alert(`🎉 導出成功！已下載離線 HTML 報告，可直接用瀏覽器開啟分享。`);
+    } catch (err) {
+        console.error(err);
+        alert("❌ HTML 導出發生錯誤: " + err.message + "\n" + err.stack);
+    }
 }
 
 async function exportToPDF() {
-    if (!window.jspdf) {
-        alert("❌ 無法載入 PDF 編譯模組，請檢查您的網路連線是否正常。");
-        return;
-    }
-    // 獲取勾選的投影片
-    const checkedCbs = document.querySelectorAll(".slide-select-checkbox:checked");
-    const checkedNos = Array.from(checkedCbs).map(cb => parseInt(cb.dataset.slideNo, 10));
-    const targetSlides = slideCandidates.filter(s => checkedNos.includes(s.slide_no));
+    try {
+        if (!window.jspdf) {
+            alert("❌ 無法載入 PDF 編譯模組，請檢查您的網路連線是否正常。");
+            return;
+        }
+        // 獲取勾選的投影片
+        const checkedCbs = document.querySelectorAll(".slide-select-checkbox:checked");
+        const checkedNos = Array.from(checkedCbs).map(cb => parseInt(cb.getAttribute("data-slide-no"), 10));
+        const targetSlides = slideCandidates.filter(s => checkedNos.includes(s.slide_no));
 
     if (targetSlides.length === 0) {
         alert("請至少勾選一張投影片以導出 PDF！");
@@ -643,17 +649,22 @@ async function exportToPDF() {
     const title = taskTitleInput.value.trim().replace(/[\/\\?%*:|"<>. ]/g, "_") || "presentation";
     pdf.save(`slides_${title}.pdf`);
     alert("🎉 PDF 簡報匯出下載成功！");
+    } catch (err) {
+        console.error(err);
+        alert("❌ PDF 導出發生錯誤: " + err.message + "\n" + err.stack);
+    }
 }
 
 async function exportToZIP() {
-    if (!window.JSZip) {
-        alert("❌ 無法載入 ZIP 壓縮模組，請檢查您的網路連線是否正常。");
-        return;
-    }
-    // 獲取勾選的投影片
-    const checkedCbs = document.querySelectorAll(".slide-select-checkbox:checked");
-    const checkedNos = Array.from(checkedCbs).map(cb => parseInt(cb.dataset.slideNo, 10));
-    const targetSlides = slideCandidates.filter(s => checkedNos.includes(s.slide_no));
+    try {
+        if (!window.JSZip) {
+            alert("❌ 無法載入 ZIP 壓縮模組，請檢查您的網路連線是否正常。");
+            return;
+        }
+        // 獲取勾選的投影片
+        const checkedCbs = document.querySelectorAll(".slide-select-checkbox:checked");
+        const checkedNos = Array.from(checkedCbs).map(cb => parseInt(cb.getAttribute("data-slide-no"), 10));
+        const targetSlides = slideCandidates.filter(s => checkedNos.includes(s.slide_no));
 
     if (targetSlides.length === 0) {
         alert("請至少勾選一張投影片以打包 ZIP！");
@@ -699,6 +710,10 @@ async function exportToZIP() {
     link.download = `slides_${title}.zip`;
     link.click();
     alert("🎉 ZIP 圖片包下載成功！");
+    } catch (err) {
+        console.error(err);
+        alert("❌ ZIP 導出發生錯誤: " + err.message + "\n" + err.stack);
+    }
 }
 
 // 實作 YouTube 影片串流解析與 CORS 代理載入 (v2.06)
@@ -783,58 +798,63 @@ function setupYouTubeLoader() {
 
 // 導出本機時間軸 JSON 檔案 (v2.07)
 function exportToJSON() {
-    // 獲取勾選的投影片
-    const checkedCbs = document.querySelectorAll(".slide-select-checkbox:checked");
-    const checkedNos = Array.from(checkedCbs).map(cb => parseInt(cb.dataset.slideNo, 10));
-    
-    let list = [];
-    if (slideCandidates && slideCandidates.length > 0) {
-        // 本機掃描模式：依勾選進行過濾與重設序號
-        list = slideCandidates
-            .filter(s => checkedNos.includes(s.slide_no))
-            .map((s, index) => ({
-                slide_no: index + 1,
-                timestamp: s.timestamp,
-                seconds: s.seconds
-            }));
-    } else if (activeTaskData && activeTaskData.slides) {
-        // 載入歷史紀錄模式
-        list = activeTaskData.slides;
+    try {
+        // 獲取勾選的投影片
+        const checkedCbs = document.querySelectorAll(".slide-select-checkbox:checked");
+        const checkedNos = Array.from(checkedCbs).map(cb => parseInt(cb.getAttribute("data-slide-no"), 10));
+        
+        let list = [];
+        if (slideCandidates && slideCandidates.length > 0) {
+            // 本機掃描模式：依勾選進行過濾與重設序號
+            list = slideCandidates
+                .filter(s => checkedNos.includes(s.slide_no))
+                .map((s, index) => ({
+                    slide_no: index + 1,
+                    timestamp: s.timestamp,
+                    seconds: s.seconds
+                }));
+        } else if (activeTaskData && activeTaskData.slides) {
+            // 載入歷史紀錄模式
+            list = activeTaskData.slides;
+        }
+
+        if (list.length === 0) {
+            alert("目前沒有勾選任何投影片，無法導出！");
+            return;
+        }
+
+        const title = taskTitleInput.value.trim() || "未命名簡報";
+        const videoId = mainVideo.dataset.videoId || "";
+        const videoUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : (videoFile ? videoFile.name : "Local Video");
+
+        // 重新格式化成 Chrome 外掛時間軸標準格式
+        const slidesList = list.map(s => ({
+            slide_no: s.slide_no,
+            timestamp: s.timestamp,
+            seconds: s.seconds,
+            filename: `slide_${s.slide_no.toString().padStart(3, "0")}.png`
+        }));
+
+        const payload = {
+            title: title,
+            video_path: videoUrl,
+            slides: slidesList
+        };
+
+        const jsonString = JSON.stringify(payload, null, 2);
+        const blob = new Blob([jsonString], { type: "application/json" });
+
+        // 觸發瀏覽器下載 JSON 檔給 Chrome 外掛使用
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `slides_${title.replace(/[\/\\?%*:|"<>. ]/g, "_")}.json`;
+        link.click();
+        
+        alert(`🎉 導出成功！已下載外掛專用時間軸 JSON 到本機。`);
+    } catch (err) {
+        console.error(err);
+        alert("❌ JSON 導出發生錯誤: " + err.message + "\n" + err.stack);
     }
-
-    if (list.length === 0) {
-        alert("目前沒有勾選任何投影片，無法導出！");
-        return;
-    }
-
-    const title = taskTitleInput.value.trim() || "未命名簡報";
-    const videoId = mainVideo.dataset.videoId || "";
-    const videoUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : (videoFile ? videoFile.name : "Local Video");
-
-    // 重新格式化成 Chrome 外掛時間軸標準格式
-    const slidesList = list.map(s => ({
-        slide_no: s.slide_no,
-        timestamp: s.timestamp,
-        seconds: s.seconds,
-        filename: `slide_${s.slide_no.toString().padStart(3, "0")}.png`
-    }));
-
-    const payload = {
-        title: title,
-        video_path: videoUrl,
-        slides: slidesList
-    };
-
-    const jsonString = JSON.stringify(payload, null, 2);
-    const blob = new Blob([jsonString], { type: "application/json" });
-
-    // 觸發瀏覽器下載 JSON 檔給 Chrome 外掛使用
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `slides_${title.replace(/[\/\\?%*:|"<>. ]/g, "_")}.json`;
-    link.click();
-    
-    alert(`🎉 導出成功！已下載外掛專用時間軸 JSON 到本機。`);
 }
 
 // 本機與外掛對接核心 (v2.07)
