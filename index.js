@@ -1855,7 +1855,7 @@ function setupAiPanel() {
     if (btnRunAi) {
         btnRunAi.addEventListener("click", async () => {
             // 密碼安全驗證門檻，防範無授權 API 調用
-            const pwd = prompt("🔒 執行 AI 分析需要身分驗證，請輸入管理密碼：", "666666");
+            const pwd = prompt("🔒 執行 AI 分析需要身分驗證，請輸入管理密碼：");
             if (pwd === null) return;
             if (pwd !== "666666") {
                 alert("❌ 密碼錯誤！無法啟動 AI 分析。");
@@ -1933,8 +1933,8 @@ ${transcriptPrompt}`;
                         cfModelName = "@cf/qwen/qwen3-30b-a3b-fp8";
                     } else if (modelVal === "builtin_deepseek_qwen_32b") {
                         cfModelName = "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b";
-                    } else if (modelVal === "builtin_qwen_vl") {
-                        cfModelName = "@cf/uform/uform-gen2-qwen-500m";
+                    } else if (modelVal === "builtin_llava") {
+                        cfModelName = "@cf/llava-hf/llava-1.5-7b-hf";
                     }
                     
                     const res = await fetchWithAuth("/api/ai-analyze", {
@@ -2164,7 +2164,7 @@ const modelCosts = {
     "builtin_gemma_26b": { name: "Gemma-4 26B", price: 0.27, type: "Text" },
     "builtin_llama_vision": { name: "Llama 3.2 Vision 11B", price: 0.15, type: "Vision" },
     "builtin_glm_4_flash": { name: "GLM-4.7-Flash", price: 0.10, type: "Text" },
-    "builtin_qwen_vl": { name: "Qwen-VL-500M", price: 0.015, type: "Vision" },
+    "builtin_llava": { name: "LLaVA-1.5 7B", price: 0.05, type: "Vision" },
     "gemini_3_5_flash": { name: "Gemini 3.5 Flash", price: 0.075, type: "Vision" },
     "gemini_1_5_flash": { name: "Gemini 1.5 Flash", price: 0.075, type: "Vision" },
     "gemini_2_0_flash": { name: "Gemini 2.0 Flash", price: 0.075, type: "Vision" },
