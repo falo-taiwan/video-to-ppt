@@ -1928,11 +1928,13 @@ ${transcriptPrompt}`;
                     } else if (modelVal === "builtin_gemma_26b") {
                         cfModelName = "@cf/google/gemma-4-26b-a4b-it";
                     } else if (modelVal === "builtin_glm_4_flash") {
-                        cfModelName = "@cf/zhipuai/glm-4.7-flash";
+                        cfModelName = "@cf/zai-org/glm-4.7-flash";
                     } else if (modelVal === "builtin_qwen_30b") {
                         cfModelName = "@cf/qwen/qwen3-30b-a3b-fp8";
                     } else if (modelVal === "builtin_deepseek_qwen_32b") {
                         cfModelName = "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b";
+                    } else if (modelVal === "builtin_qwen_vl") {
+                        cfModelName = "@cf/uform/uform-gen2-qwen-500m";
                     }
                     
                     const res = await fetchWithAuth("/api/ai-analyze", {
@@ -2162,6 +2164,7 @@ const modelCosts = {
     "builtin_gemma_26b": { name: "Gemma-4 26B", price: 0.27, type: "Text" },
     "builtin_llama_vision": { name: "Llama 3.2 Vision 11B", price: 0.15, type: "Vision" },
     "builtin_glm_4_flash": { name: "GLM-4.7-Flash", price: 0.10, type: "Text" },
+    "builtin_qwen_vl": { name: "Qwen-VL-500M", price: 0.015, type: "Vision" },
     "gemini_3_5_flash": { name: "Gemini 3.5 Flash", price: 0.075, type: "Vision" },
     "gemini_1_5_flash": { name: "Gemini 1.5 Flash", price: 0.075, type: "Vision" },
     "gemini_2_0_flash": { name: "Gemini 2.0 Flash", price: 0.075, type: "Vision" },

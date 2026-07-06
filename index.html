@@ -174,17 +174,18 @@
                 <div style="margin-bottom: 12px;">
                     <label style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 4px; text-align: left;">選擇分析模型：</label>
                     <select id="ai-model-select" style="width: 100%; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--card-border); color: #fff; padding: 8px; border-radius: 6px; font-size: 13px; outline: none; cursor: pointer;">
-                        <option value="builtin_llama_vision" selected>內建 Llama-3.2 Vision 11B (免 Key 影像+文本)</option>
-                        <option value="builtin_llama_70b">內建 Llama-3.1 70B (免 Key 基準文字大模型)</option>
-                        <option value="builtin_gemma_26b">內建 Gemma-4 26B (免 Key 最新 Google 模型)</option>
-                        <option value="builtin_glm_4_flash">內建 GLM-4.7-Flash (免 Key 國產極速大模型)</option>
-                        <option value="builtin_qwen_30b">內建 Qwen3 30B (免 Key 國產最新大模型)</option>
-                        <option value="builtin_deepseek_qwen_32b">內建 DeepSeek-RDistill-Qwen 32B (免 Key 國產推理大模型)</option>
-                        <option value="gemini_3_5_flash">自備 Key: Gemini 3.5 Flash (最新多模態旗艦)</option>
-                        <option value="gemini_3_1_lite">自備 Key: Gemini 3.1 Flash-Lite (高CP值首選)</option>
-                        <option value="gemini_2_5_lite">自備 Key: Gemini 2.5 Flash-Lite</option>
-                        <option value="gemini_2_0_flash">自備 Key: Gemini 2.0 Flash</option>
-                        <option value="gemini_1_5_flash">自備 Key: Gemini 1.5 Flash</option>
+                        <option value="builtin_llama_70b">內建 Llama-3.1 70B (免 Key 基準 100%)</option>
+                        <option value="builtin_deepseek_qwen_32b">內建 DeepSeek-R1-Qwen 32B (免 Key 50.0%)</option>
+                        <option value="builtin_qwen_30b">內建 Qwen3 30B (免 Key 42.9%)</option>
+                        <option value="builtin_gemma_26b">內建 Gemma-4 26B (免 Key 38.6%)</option>
+                        <option value="builtin_llama_vision" selected>內建 Llama-3.2 Vision 11B (免 Key 21.4% 影像+文本)</option>
+                        <option value="builtin_glm_4_flash">內建 GLM-4.7-Flash (免 Key 14.3%)</option>
+                        <option value="builtin_qwen_vl">內建 Qwen-VL-500M (免 Key 2.1% 影像+文本)</option>
+                        <option value="gemini_3_5_flash">自備 Key: Gemini 3.5 Flash (10.7% 影像+文本)</option>
+                        <option value="gemini_3_1_lite">自備 Key: Gemini 3.1 Flash-Lite (5.4% 影像+文本)</option>
+                        <option value="gemini_2_5_lite">自備 Key: Gemini 2.5 Flash-Lite (5.4% 影像+文本)</option>
+                        <option value="gemini_2_0_flash">自備 Key: Gemini 2.0 Flash (10.7% 影像+文本)</option>
+                        <option value="gemini_1_5_flash">自備 Key: Gemini 1.5 Flash (10.7% 影像+文本)</option>
                     </select>
                 </div>
                 
