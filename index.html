@@ -41,19 +41,28 @@
                 <h2>📥 載入影片進行分析</h2>
                 <div id="drop-zone" class="upload-zone">
                     <div class="upload-icon">🎥</div>
-                    <div class="upload-text">將影片拖曳至此處，或點擊選擇檔案</div>
-                    <div class="upload-subtext">支援 MP4, WebM 等瀏覽器原生支援之影片格式</div>
+                    <div class="upload-text">將影片或匯出的 v3.html 拖曳至此處，或點擊選擇檔案</div>
+                    <div class="upload-subtext">支援 MP4/WebM 影片，或已匯出的 v3.html 備註存檔 (可直接還原歷史工作區與進行 AI 讀圖分析)</div>
                 </div>
-                <input type="file" id="video-file-input" accept="video/mp4,video/webm">
+                <input type="file" id="video-file-input" accept="video/mp4,video/webm,text/html">
                 
                 <div style="margin-top: 16px; border-top: 1px dashed var(--card-border); padding-top: 16px;">
-                    <div style="font-size: 13px; margin-bottom: 6px; font-weight: 500; text-align: left;">🌐 或者輸入 YouTube 影片網址 (⚠️ 因 YouTube 限制雲端 IP，建議下載 MP4 後拖入分析)：</div>
+                    <div style="font-size: 13px; margin-bottom: 6px; font-weight: 500; text-align: left;">🌐 或者輸入 YouTube 影片網址 (⚠️ 建議下載 MP4 後拖入分析)：</div>
                     <div style="display: flex; gap: 8px;">
                         <input type="text" id="yt-url-input" style="flex: 1; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); border-radius: 6px; padding: 8px; color: #fff; font-size: 13px;" value="https://www.youtube.com/watch?v=L5LLzXrKFIY" placeholder="例如 https://www.youtube.com/watch?v=...">
                         <button id="btn-load-yt" class="btn btn-primary" style="padding: 0 16px; font-size: 13px; white-space: nowrap;">載入影片</button>
                         <button id="btn-download-yt-video" class="btn btn-secondary" style="display: none; padding: 0 16px; font-size: 13px; white-space: nowrap; background: #2563eb; color: #fff; border-color: #2563eb;">📥 下載影片</button>
                     </div>
                     <div id="yt-loading-status" style="font-size: 11px; color: var(--accent-glow); margin-top: 6px; text-align: left; display: none;">正在解析 YouTube 邊緣串流，請稍候...</div>
+                </div>
+
+                <div style="margin-top: 16px; border-top: 1px dashed var(--card-border); padding-top: 16px;">
+                    <div style="font-size: 13px; margin-bottom: 6px; font-weight: 500; text-align: left;">🗣️ 載入語音逐字稿字幕檔 (選填，支援 .srt, .vtt)：</div>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="file" id="subtitle-file-input" accept=".srt,.vtt" style="display: none;">
+                        <button onclick="document.getElementById('subtitle-file-input').click()" class="btn btn-secondary" style="flex: 1; font-size: 13px;">📂 選擇字幕檔案</button>
+                        <span id="subtitle-file-name" style="font-size: 12px; color: var(--text-secondary); align-self: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px;">未選擇檔案</span>
+                    </div>
                 </div>
             </div>
 
@@ -90,6 +99,9 @@
                         </div>
 
                         <div style="margin-left: auto; display: flex; gap: 8px;">
+                            <button id="btn-manual-capture" class="btn btn-secondary">📸 手動擷取</button>
+                            <input type="file" id="custom-img-input" accept="image/*" style="display: none;" multiple>
+                            <button id="btn-upload-custom-img" class="btn btn-secondary" onclick="document.getElementById('custom-img-input').click()">➕ 自訂圖片</button>
                             <button id="btn-start-analysis" class="btn btn-primary">⚡ 開始本機分析</button>
                             <button id="btn-stop-analysis" class="btn btn-danger" style="display: none;">🛑 停止</button>
                         </div>
@@ -141,6 +153,7 @@
                             <select id="html-type-select" style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); color: var(--text-primary); border-radius: 6px; padding: 4px 8px; font-size: 12px; outline: none; cursor: pointer;">
                                 <option value="basic" selected>基礎版</option>
                                 <option value="detailed">詳細教材版</option>
+                                <option value="v3">AI 分析底稿版 (v3.html)</option>
                             </select>
                         </div>
                         <button id="btn-export-html" class="btn btn-secondary">🌐 導出本機 HTML</button>
@@ -152,6 +165,45 @@
                 </div>
             </div>
 
+        </div>
+
+        <!-- 右側 AI 智能解讀側邊欄 -->
+        <div id="ai-sidebar" class="glass-card ai-sidebar" style="display: none;">
+            <h2>🤖 AI 簡報智能解讀</h2>
+            <div class="ai-controls">
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 4px; text-align: left;">選擇分析模型：</label>
+                    <select id="ai-model-select" style="width: 100%; background: rgba(15, 23, 42, 0.8); border: 1px solid var(--card-border); color: #fff; padding: 8px; border-radius: 6px; font-size: 13px; outline: none; cursor: pointer;">
+                        <option value="builtin_llama_vision" selected>內建 Llama-3.2 Vision 11B (免 Key 影像+文本)</option>
+                        <option value="builtin_llama_70b">內建 Llama-3.1 70B (免 Key 純文字大模型)</option>
+                        <option value="builtin_gemma_26b">內建 Gemma-4 26B (免 Key 純文字大模型)</option>
+                        <option value="gemini_3_5_flash">自備 Key: Gemini 3.5 Flash (最新旗艦)</option>
+                        <option value="gemini_3_1_lite">自備 Key: Gemini 3.1 Flash-Lite (最速推薦)</option>
+                        <option value="gemini_2_5_lite">自備 Key: Gemini 2.5 Flash-Lite</option>
+                        <option value="gemini_2_0_flash">自備 Key: Gemini 2.0 Flash</option>
+                        <option value="gemini_1_5_flash">自備 Key: Gemini 1.5 Flash</option>
+                    </select>
+                </div>
+                
+                <div id="gemini-key-wrapper" style="margin-bottom: 12px; display: none;">
+                    <label style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 4px; text-align: left;">Gemini API Key：</label>
+                    <input type="password" id="gemini-key-input" style="width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); color: #fff; border-radius: 6px; padding: 8px; font-size: 13px;" placeholder="輸入 AI Key (不會上傳伺服器)...">
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 4px; text-align: left;">字幕狀態：</label>
+                    <div id="subtitle-status" style="font-size: 12px; color: var(--text-secondary); background: rgba(15, 23, 42, 0.4); padding: 8px; border-radius: 6px; border: 1px solid var(--card-border); text-align: left;">
+                        ❌ 未載入字幕檔（僅能利用圖片解讀）
+                    </div>
+                </div>
+
+                <button id="btn-run-ai" class="btn btn-primary" style="width: 100%; padding: 10px; font-size: 13px;">🤖 開始 AI 降維一鍵分析</button>
+            </div>
+            
+            <div id="ai-report-area" style="margin-top: 16px; border-top: 1px solid var(--card-border); padding-top: 16px; display: none; text-align: left;">
+                <h3 style="font-size: 14px; color: var(--accent-blue); margin-bottom: 10px;">📋 AI 分析成果報告</h3>
+                <div id="ai-report-content" class="ai-report-content" style="background: rgba(15, 23, 42, 0.6); padding: 12px; border-radius: 8px; border: 1px solid var(--card-border); font-size: 12px; line-height: 1.6; color: var(--text-primary); overflow-y: auto; max-height: 400px; white-space: pre-wrap;"></div>
+            </div>
         </div>
     </div>
 

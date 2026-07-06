@@ -9,6 +9,8 @@ let isScanning = false;
 let lastFrameData = null; // Uint8ClampedArray of 32x18 low-res frame
 let slideCandidates = []; // Array of { slide_no, timestamp, seconds, blobUrl, base64 }
 let videoFile = null;
+let subtitles = []; // Loaded subtitle timestamps and contents
+let latestAiReport = ""; // Generated markdown report from Gemini/Llama
 
 // 時間格式化小幫手 (hh:mm:ss)
 function formatTime(seconds) {
@@ -97,6 +99,9 @@ document.addEventListener("DOMContentLoaded", () => {
     setupAnalysisControls();
     setupExportButtons();
     setupYouTubeLoader();
+    setupSubtitleLoader();
+    setupManualControls();
+    setupAiPanel();
 
     // 全選與清除事件綁定 (v2.07)
     if (btnSelectAll) {
@@ -146,13 +151,13 @@ function setupFileUpload() {
         e.preventDefault();
         dropZone.classList.remove("dragover");
         if (e.dataTransfer.files.length > 0) {
-            handleVideoFile(e.dataTransfer.files[0]);
+            handleUploadedFile(e.dataTransfer.files[0]);
         }
     });
 
     videoFileInput.addEventListener("change", (e) => {
         if (e.target.files.length > 0) {
-            handleVideoFile(e.target.files[0]);
+            handleUploadedFile(e.target.files[0]);
         }
     });
 }
@@ -171,6 +176,13 @@ function handleVideoFile(file) {
     analysisCard.style.display = "block";
     galleryCard.style.display = "none"; // 隱藏舊的畫廊
     if (analysisLogConsole) analysisLogConsole.style.display = "none";
+
+    // 啟動 AI 智能解讀面板
+    const aiSidebar = document.getElementById("ai-sidebar");
+    if (aiSidebar) {
+        aiSidebar.style.display = "block";
+        document.querySelector(".main-layout").classList.add("has-ai-panel");
+    }
 }
 
 // 5. 設定影片分析控制按鈕與核心邏輯
@@ -354,8 +366,20 @@ function renderGalleryItem(slide) {
                 <span class="slide-card-label" style="font-weight:bold;">No.${slide.slide_no}</span>
                 <span class="gallery-card-time">${slide.timestamp}</span>
             </div>
+            <textarea class="gallery-card-memo" data-slide-no="${slide.slide_no}" placeholder="✍️ 講者口述台詞與自訂備註...">${slide.memo || ""}</textarea>
         </div>
     `;
+
+    // 雙向綁定備註變數
+    const textarea = card.querySelector(".gallery-card-memo");
+    textarea.addEventListener("input", (e) => {
+        const slideNo = parseInt(e.target.getAttribute("data-slide-no"), 10);
+        const target = slideCandidates.find(s => s.slide_no === slideNo);
+        if (target) {
+            target.memo = e.target.value;
+        }
+    });
+
     galleryGrid.appendChild(card);
 }
 
@@ -435,15 +459,42 @@ async function exportToHTML() {
         }
 
         const tempCanvas = document.createElement("canvas");
-        tempCanvas.width = slideImg.naturalWidth;
-        tempCanvas.height = slideImg.naturalHeight;
         const ctx = tempCanvas.getContext("2d");
-        ctx.drawImage(slideImg, 0, 0);
 
-        const dataUrl = tempCanvas.toDataURL("image/png");
+        let dataUrl;
+        if (htmlType === "v3") {
+            // 降維壓縮：AI 底稿版強行縮小至 480px 寬，並以 60% 品質的 WebP 導出，大幅壓縮體積
+            const targetWidth = 480;
+            const targetHeight = Math.round(480 * (slideImg.naturalHeight / slideImg.naturalWidth)) || 270;
+            tempCanvas.width = targetWidth;
+            tempCanvas.height = targetHeight;
+            ctx.drawImage(slideImg, 0, 0, targetWidth, targetHeight);
+            dataUrl = tempCanvas.toDataURL("image/webp", 0.6);
+        } else {
+            tempCanvas.width = slideImg.naturalWidth;
+            tempCanvas.height = slideImg.naturalHeight;
+            ctx.drawImage(slideImg, 0, 0);
+            dataUrl = tempCanvas.toDataURL("image/webp", 0.8);
+        }
+        
         const zipSlideNo = i + 1;
 
-        if (htmlType === "detailed") {
+        if (htmlType === "v3") {
+            galleryItemsHtml += `
+            <div class="slide-card" style="display: flex; gap: 20px; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.08); padding: 15px; border-radius: 8px; margin-bottom: 20px; align-items: start; text-align: left;">
+                <div style="flex: 0 0 320px;">
+                    <img src="${dataUrl}" alt="Slide ${zipSlideNo}" onclick="openZoom('${dataUrl}')" style="width: 100%; border-radius: 6px; cursor: pointer; border: 1px solid rgba(255, 255, 255, 0.1);">
+                    <div style="margin-top: 8px; display: flex; justify-content: space-between; font-size: 12px; color: #38bdf8; font-family: monospace;">
+                        <span style="font-weight: bold;">Page #${zipSlideNo.toString().padStart(3, "0")}</span>
+                        <span>⏱️ ${slide.timestamp}</span>
+                    </div>
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0;">
+                    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #38bdf8; font-weight: bold;">🗣️ 講者口述台詞與備註：</div>
+                    <textarea class="memo-input" data-slide-no="${slide.slide_no}" style="width: 100%; height: 80px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.1); color: #f8fafc; border-radius: 6px; padding: 8px; font-size: 12px; font-family: inherit; resize: vertical; outline: none;" placeholder="在此處編輯本頁逐字稿或自訂筆記...">${slide.memo || ""}</textarea>
+                </div>
+            </div>`;
+        } else if (htmlType === "detailed") {
             // 計算平均色彩
             let r = 0, g = 0, b = 0;
             const imgDataObj = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
@@ -513,7 +564,189 @@ async function exportToHTML() {
     }
 
     let htmlContent = "";
-    if (htmlType === "detailed") {
+    if (htmlType === "v3") {
+        htmlContent = `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title} - AI Ingestion & Analysis Draft (v3)</title>
+    <meta name="author" content="Falo x Force Cheng">
+    <meta name="copyright" content="Falo x Force Cheng 2026/7/6 v1.01">
+    <!-- Hidden Watermark: Copyright Falo x Force Cheng 2026/7/6 v1.01 -->
+    <!-- COPYRIGHT_WATERMARK: FALO_FORCECHENG_2026_07_06_V1.01 -->
+    
+    <!-- 
+    [SYSTEM GUIDE FOR AI ANALYSIS]
+    這是一份由 Falo x Force Cheng 開發的 Video to PPT 工具所生成的 AI 專用多模態分析底稿。
+    當使用者上傳此檔案給您（Claude/GPT）進行分析時，請遵循以下規定：
+    1. 每張簡報圖片都有一個明確的「Page #XXX」徽章與「講者口述台詞與備註」。
+    2. 請結合圖片中的視覺內容（圖表、公式、關鍵字）與口述台詞進行交叉對比理解。
+    3. 進行問答與摘要時，請務必指明參考的頁碼（例如：根據 Page #003 中所述...）。
+    -->
+    
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #090d16;
+            --bg-secondary: rgba(22, 30, 49, 0.7);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-blue: #38bdf8;
+            --accent-green: #34d399;
+            --card-border: rgba(255, 255, 255, 0.08);
+        }
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Outfit', 'Noto Sans TC', sans-serif;
+            margin: 0;
+            padding: 30px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            max-width: 1000px;
+            width: 100%;
+        }
+        .header {
+            margin-bottom: 30px;
+            border-bottom: 1px solid var(--card-border);
+            padding-bottom: 20px;
+            text-align: left;
+        }
+        h1 { margin: 0 0 10px 0; color: var(--accent-blue); font-size: 24px; }
+        .meta { color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+        
+        .ai-summary-card {
+            background: rgba(56, 189, 248, 0.03);
+            border: 1px solid rgba(56, 189, 248, 0.15);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        .ai-summary-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: var(--accent-blue);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-align: left;
+        }
+        .ai-summary-content {
+            font-size: 13px;
+            line-height: 1.6;
+            color: #e2e8f0;
+            white-space: pre-wrap;
+            text-align: left;
+        }
+        
+        #lightbox {
+            display: none;
+            position: fixed;
+            z-index: 99999;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(9, 13, 22, 0.95);
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        #lightbox img {
+            max-width: 95%;
+            max-height: 90vh;
+            border-radius: 8px;
+            border: 1px solid var(--card-border);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 ${title} - AI Ingestion & Analysis Draft (v3.html)</h1>
+            <div class="meta">
+                <strong>影片路徑：</strong> ${videoUrl} <br>
+                <strong>簡報頁數：</strong> ${targetSlides.length} 頁 | 
+                <strong>匯出時間：</strong> ${new Date().toLocaleString("zh-TW", { hour12: false })} <br>
+                <strong>授權宣告：</strong> Falo x Force Cheng 2026/7/6 v1.01 (Falo AI Lab)
+            </div>
+        </div>
+        
+        ${latestAiReport ? `
+        <div class="ai-summary-card">
+            <div class="ai-summary-title">🤖 AI 簡報智能精煉與教學總結</div>
+            <div class="ai-summary-content">${latestAiReport}</div>
+        </div>
+        ` : ''}
+
+        <div class="slides-container">
+            ${galleryItemsHtml}
+        </div>
+        
+        <footer style="text-align: center; padding: 24px; color: var(--text-secondary); font-size: 11px; border-top: 1px solid var(--card-border); margin-top: 40px;">
+            <p>© 2026 Falo x Force Cheng. All rights reserved. | 版本: v1.01 (2026/7/6)</p>
+            <div style="display: none;" data-watermark="Falo x Force Cheng 2026/7/6 v1.01"></div>
+        </footer>
+    </div>
+    
+    <!-- Floating Save Button -->
+    <div id="save-float-btn" style="position: fixed; bottom: 30px; right: 30px; z-index: 10000; background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%); color: #0b0f19; font-weight: bold; border-radius: 50px; padding: 12px 24px; box-shadow: 0 10px 25px rgba(0,242,254,0.4); cursor: pointer; display: flex; align-items: center; gap: 8px; font-family: sans-serif; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'" onclick="saveMemoEdits()">
+        <span>💾 儲存並更新 v3.html</span>
+    </div>
+
+    <div id="lightbox" onclick="this.style.display='none'">
+        <img id="lightbox-img" src="" alt="Zoomed Slide">
+    </div>
+
+    <script>
+        function openZoom(src) {
+            document.getElementById('lightbox-img').src = src;
+            document.getElementById('lightbox').style.display = 'flex';
+        }
+
+        const docId = "v3_memo_" + window.location.pathname;
+        document.addEventListener("DOMContentLoaded", () => {
+            const cached = localStorage.getItem(docId);
+            if (cached) {
+                const data = JSON.parse(cached);
+                Object.keys(data).forEach(slideNo => {
+                    const ta = document.querySelector(\`textarea[data-slide-no="\${slideNo}"]\`);
+                    if (ta) ta.value = data[slideNo];
+                });
+            }
+            
+            document.querySelectorAll(".memo-input").forEach(ta => {
+                ta.addEventListener("input", () => {
+                    const data = {};
+                    document.querySelectorAll(".memo-input").forEach(el => {
+                        data[el.getAttribute("data-slide-no")] = el.value;
+                    });
+                    localStorage.setItem(docId, JSON.stringify(data));
+                });
+            });
+        });
+
+        function saveMemoEdits() {
+            document.querySelectorAll(".memo-input").forEach(ta => {
+                ta.textContent = ta.value;
+            });
+            const htmlSource = "<!DOCTYPE html>\\n" + document.documentElement.outerHTML;
+            const blob = new Blob([htmlSource], { type: "text/html; charset=utf-8" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "v3.html";
+            link.click();
+            alert("🎉 修改已成功保存並寫入原始碼！\\n新檔案已下載為 v3.html，此檔案包含您剛寫入的所有備註！");
+        }
+    </script>
+</body>
+</html>`;
+    } else if (htmlType === "detailed") {
         htmlContent = `<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -1007,7 +1240,11 @@ async function exportToHTML() {
     
     const link = document.createElement("a");
     link.href = URL.createObjectURL(htmlBlob);
-    link.download = `report_${safeTitle}.html`;
+    if (htmlType === "v3") {
+        link.download = "v3.html";
+    } else {
+        link.download = `report_${safeTitle}.html`;
+    }
     link.click();
     
     addAnalysisLog(`✅ <span style="color: #34d399; font-weight: bold;">單一檔案離線 HTML 導出成功！(含全部 Base64 內嵌影格)</span>`);
@@ -1222,6 +1459,13 @@ function setupYouTubeLoader() {
                 // 註冊暫存屬性以在存檔時使用
                 mainVideo.dataset.videoId = videoInfo.videoId;
                 mainVideo.dataset.videoTitle = videoInfo.title;
+
+                // 啟動 AI 智能解讀面板
+                const aiSidebar = document.getElementById("ai-sidebar");
+                if (aiSidebar) {
+                    aiSidebar.style.display = "block";
+                    document.querySelector(".main-layout").classList.add("has-ai-panel");
+                }
             };
 
             mainVideo.onerror = (err) => {
@@ -1365,3 +1609,541 @@ async function rebuildSlidesFromVideo(slides) {
     progressCard.style.display = "none";
     addAnalysisLog(`🎉 本機畫面重建完成！共生成 ${total} 張投影片。您現在可以自由勾選並點擊「匯出 PDF」、「導出 ZIP」或「導出本機 HTML」了！`);
 }
+
+// 7. 字幕檔載入與時間軸自動對齊邏輯 (v2.08)
+function setupSubtitleLoader() {
+    const subtitleFileInput = document.getElementById("subtitle-file-input");
+    const subtitleFileName = document.getElementById("subtitle-file-name");
+    const subtitleStatus = document.getElementById("subtitle-status");
+
+    if (subtitleFileInput) {
+        subtitleFileInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (subtitleFileName) subtitleFileName.textContent = file.name;
+            
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const text = evt.target.result;
+                const ext = file.name.split(".").pop().toLowerCase();
+                subtitles = parseSubtitle(text, ext);
+                
+                if (subtitleStatus) {
+                    subtitleStatus.innerHTML = `✅ 已成功載入字幕檔 (${subtitles.length} 條語音對齊)`;
+                    subtitleStatus.style.color = "var(--accent-green)";
+                }
+                
+                // 若已有投影片影格，立即進行字幕台詞對齊
+                if (slideCandidates.length > 0) {
+                    alignSubtitlesToSlides();
+                }
+            };
+            reader.readAsText(file);
+        });
+    }
+}
+
+// 字幕解析引擎 (SRT & VTT)
+function parseSubtitle(text, type) {
+    const list = [];
+    if (type === "vtt") {
+        const blocks = text.split(/\r?\n\r?\n/);
+        for (const block of blocks) {
+            if (block.includes("-->")) {
+                const lines = block.split(/\r?\n/);
+                const timeLine = lines.find(l => l.includes("-->"));
+                if (timeLine) {
+                    const times = timeLine.split("-->").map(t => parseTimestamp(t.trim()));
+                    const textLines = lines.slice(lines.indexOf(timeLine) + 1).filter(l => l.trim() !== "");
+                    list.push({ start: times[0], end: times[1], text: textLines.join(" ") });
+                }
+            }
+        }
+    } else {
+        const blocks = text.split(/\r?\n\r?\n/);
+        for (const block of blocks) {
+            if (block.includes("-->")) {
+                const lines = block.split(/\r?\n/);
+                const timeLine = lines.find(l => l.includes("-->"));
+                if (timeLine) {
+                    const times = timeLine.split("-->").map(t => parseTimestamp(t.trim()));
+                    const textLines = lines.slice(lines.indexOf(timeLine) + 1).filter(l => l.trim() !== "");
+                    list.push({ start: times[0], end: times[1], text: textLines.join(" ") });
+                }
+            }
+        }
+    }
+    return list.sort((a, b) => a.start - b.start);
+}
+
+function parseTimestamp(timeStr) {
+    const cleaned = timeStr.replace(",", ".");
+    const parts = cleaned.split(":");
+    let secs = 0;
+    if (parts.length === 3) {
+        secs += parseFloat(parts[0]) * 3600;
+        secs += parseFloat(parts[1]) * 60;
+        secs += parseFloat(parts[2]);
+    } else if (parts.length === 2) {
+        secs += parseFloat(parts[0]) * 60;
+        secs += parseFloat(parts[1]);
+    }
+    return secs;
+}
+
+// 將字幕台詞按照時間區間對齊到投影片
+function alignSubtitlesToSlides() {
+    if (!subtitles || subtitles.length === 0) return;
+    
+    // 按時間排序
+    slideCandidates.sort((a, b) => a.seconds - b.seconds);
+    const videoDuration = mainVideo.duration || 999999;
+    
+    for (let i = 0; i < slideCandidates.length; i++) {
+        const currentSec = slideCandidates[i].seconds;
+        const nextSec = (i + 1 < slideCandidates.length) ? slideCandidates[i+1].seconds : videoDuration;
+        
+        // 抓出屬於此時間區間的字幕
+        const matched = subtitles.filter(sub => sub.start >= currentSec && sub.start < nextSec);
+        if (matched.length > 0) {
+            const mergedText = matched.map(sub => sub.text).join(" ");
+            slideCandidates[i].memo = mergedText;
+        }
+    }
+    
+    // 重新繪製前端畫廊，展示對齊後的 Textarea 內容
+    rerenderGallery();
+}
+
+function rerenderGallery() {
+    if (!galleryGrid) return;
+    galleryGrid.innerHTML = "";
+    slideCandidates.forEach(slide => {
+        renderGalleryItem(slide);
+    });
+}
+
+// 8. 手動擷取影格與自訂圖片上傳 (v2.08)
+function setupManualControls() {
+    const btnManualCapture = document.getElementById("btn-manual-capture");
+    const customImgInput = document.getElementById("custom-img-input");
+    
+    if (btnManualCapture) {
+        btnManualCapture.addEventListener("click", () => {
+            if (!mainVideo.src) {
+                alert("請先載入影片！");
+                return;
+            }
+            const slideNo = slideCandidates.length + 1;
+            const seconds = mainVideo.currentTime;
+            const timestamp = formatTime(seconds);
+            
+            const capCanvas = document.createElement("canvas");
+            capCanvas.width = mainVideo.videoWidth || 1280;
+            capCanvas.height = mainVideo.videoHeight || 720;
+            const capCtx = capCanvas.getContext("2d");
+            capCtx.drawImage(mainVideo, 0, 0, capCanvas.width, capCanvas.height);
+            
+            capCanvas.toBlob(async (blob) => {
+                const url = URL.createObjectURL(blob);
+                const base64 = await new Promise((res) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => res(reader.result);
+                    reader.readAsDataURL(blob);
+                });
+                
+                const slideItem = {
+                    slide_no: slideNo,
+                    timestamp: timestamp,
+                    seconds: seconds,
+                    url: url,
+                    base64: base64,
+                    memo: ""
+                };
+                
+                slideCandidates.push(slideItem);
+                if (capturedCountBadge) capturedCountBadge.textContent = slideCandidates.length;
+                
+                if (subtitles && subtitles.length > 0) {
+                    alignSubtitlesToSlides();
+                } else {
+                    renderGalleryItem(slideItem);
+                }
+                
+                addAnalysisLog(`📸 手動擷取影格成功：時間點 ${timestamp}`);
+            }, "image/webp", 0.85);
+        });
+    }
+
+    if (customImgInput) {
+        customImgInput.addEventListener("change", async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+            
+            for (const file of files) {
+                const slideNo = slideCandidates.length + 1;
+                const timestamp = "手動上傳";
+                const seconds = mainVideo.currentTime || 0;
+                
+                const reader = new FileReader();
+                reader.onload = async (evt) => {
+                    const base64 = evt.target.result;
+                    const url = URL.createObjectURL(file);
+                    
+                    const slideItem = {
+                        slide_no: slideNo,
+                        timestamp: timestamp,
+                        seconds: seconds,
+                        url: url,
+                        base64: base64,
+                        memo: ""
+                    };
+                    
+                    slideCandidates.push(slideItem);
+                    if (capturedCountBadge) capturedCountBadge.textContent = slideCandidates.length;
+                    
+                    if (subtitles && subtitles.length > 0) {
+                        alignSubtitlesToSlides();
+                    } else {
+                        renderGalleryItem(slideItem);
+                    }
+                    
+                    addAnalysisLog(`➕ 手動新增自訂圖片成功：No.${slideNo} (${file.name})`);
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+}
+
+// 9. AI 智能解讀控制面板設定 (v2.08)
+function setupAiPanel() {
+    const btnRunAi = document.getElementById("btn-run-ai");
+    const aiModelSelect = document.getElementById("ai-model-select");
+    const geminiKeyWrapper = document.getElementById("gemini-key-wrapper");
+    const geminiKeyInput = document.getElementById("gemini-key-input");
+    const aiReportArea = document.getElementById("ai-report-area");
+    const aiReportContent = document.getElementById("ai-report-content");
+    
+    if (aiModelSelect) {
+        const savedKey = localStorage.getItem("falo_gemini_api_key");
+        if (savedKey && geminiKeyInput) {
+            geminiKeyInput.value = savedKey;
+        }
+
+        aiModelSelect.addEventListener("change", () => {
+            if (aiModelSelect.value.startsWith("gemini_")) {
+                geminiKeyWrapper.style.display = "block";
+            } else {
+                geminiKeyWrapper.style.display = "none";
+            }
+        });
+        
+        if (aiModelSelect.value.startsWith("gemini_")) {
+            geminiKeyWrapper.style.display = "block";
+        }
+    }
+    
+    if (geminiKeyInput) {
+        geminiKeyInput.addEventListener("input", (e) => {
+            localStorage.setItem("falo_gemini_api_key", e.target.value.trim());
+        });
+    }
+    
+    if (btnRunAi) {
+        btnRunAi.addEventListener("click", async () => {
+            // 密碼安全驗證門檻，防範無授權 API 調用
+            const pwd = prompt("🔒 執行 AI 分析需要身分驗證，請輸入管理密碼：", "666666");
+            if (pwd === null) return;
+            if (pwd !== "666666") {
+                alert("❌ 密碼錯誤！無法啟動 AI 分析。");
+                return;
+            }
+
+            const checkedCbs = document.querySelectorAll(".slide-select-checkbox:checked");
+            const checkedNos = Array.from(checkedCbs).map(cb => parseInt(cb.getAttribute("data-slide-no"), 10));
+            const checkedSlides = slideCandidates.filter(s => checkedNos.includes(s.slide_no));
+            
+            if (checkedSlides.length === 0) {
+                alert("⚠️ 請先在畫廊中勾選要送出分析的投影片！");
+                return;
+            }
+            
+            btnRunAi.disabled = true;
+            btnRunAi.textContent = "⏳ 正在生成時間拼圖與分析中...";
+            if (aiReportArea) aiReportArea.style.display = "block";
+            if (aiReportContent) aiReportContent.textContent = "⏳ 正在本機拼接時間拼圖 (WebP)...\n此步驟會在您的瀏覽器中將多張影格合成為一張網格圖，完全不耗費流量。";
+            
+            try {
+                const gridWebp = await generateStoryboardGrid(checkedSlides);
+                if (!gridWebp) {
+                    throw new Error("生成時間拼圖大圖失敗。");
+                }
+                
+                if (aiReportContent) aiReportContent.textContent = "⏳ 時間拼圖生成成功！正在發送多模態解讀請求...\n請稍候，AI 正在分析影像中的簡報與您的口述字幕...";
+                
+                let transcriptPrompt = "";
+                checkedSlides.forEach((slide) => {
+                    transcriptPrompt += `[Page #${slide.slide_no} (⏱️ ${slide.timestamp})]：${slide.memo || "(無口述台詞與備註)"}\n`;
+                });
+                
+                const finalPrompt = `您是一個專業的教材與簡報解讀 AI 助理。這是一張由多個簡報頁面拼接成的『時間拼圖 (Storyboard Grid)』圖片，以及每頁簡報對齊的講者口述逐字稿。
+                
+請仔細整合【簡報畫面內容】與【講者口述台詞】，為我產出結構化、高密度的教學講義與大綱。
+請包含以下章節：
+1. 💡 整體教學大綱與核心知識結構總結。
+2. 📖 各頁投影片的導讀解析（請務必指明 Page #XXX，提取畫面上的關鍵字/圖表，並結合講者口述台詞與備註做深度註解）。
+3. 🎯 核心技術要點、關鍵名詞與問答 (Q&A) 提取。
+
+口述台詞與備註內容如下：
+${transcriptPrompt}`;
+
+                let responseText = "";
+                const modelVal = aiModelSelect.value;
+                
+                if (modelVal.startsWith("gemini_")) {
+                    const apiKey = geminiKeyInput.value.trim();
+                    if (!apiKey) {
+                        throw new Error("未填寫 Gemini API Key！");
+                    }
+                    
+                    let geminiModelName = "gemini-1.5-flash";
+                    if (modelVal === "gemini_3_5_flash") {
+                        geminiModelName = "gemini-3.5-flash";
+                    } else if (modelVal === "gemini_3_1_lite") {
+                        geminiModelName = "gemini-3.1-flash-lite";
+                    } else if (modelVal === "gemini_2_5_lite") {
+                        geminiModelName = "gemini-2.5-flash-lite";
+                    } else if (modelVal === "gemini_2_0_flash") {
+                        geminiModelName = "gemini-2.0-flash";
+                    }
+                    
+                    responseText = await callGeminiDirect(apiKey, gridWebp, finalPrompt, geminiModelName);
+                } else {
+                    let cfModelName = "@cf/meta/llama-3.2-11b-vision-instruct";
+                    if (modelVal === "builtin_llama_70b") {
+                        cfModelName = "@cf/meta/llama-3.1-70b-instruct";
+                    } else if (modelVal === "builtin_gemma_26b") {
+                        cfModelName = "@cf/google/gemma-4-26b-a4b-it";
+                    }
+                    
+                    const res = await fetchWithAuth("/api/ai-analyze", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ image: gridWebp, prompt: finalPrompt, model: cfModelName })
+                    });
+                    if (!res.ok) {
+                        const errText = await res.text();
+                        throw new Error(`Workers AI 內建模型伺服器錯誤 (HTTP ${res.status}): ${errText}`);
+                    }
+                    const data = await res.json();
+                    responseText = data.response || data.result?.response || JSON.stringify(data);
+                }
+                
+                latestAiReport = responseText;
+                if (aiReportContent) aiReportContent.textContent = responseText;
+                addAnalysisLog("🤖 <span style=\"color: #34d399; font-weight: bold;\">AI 簡報一鍵分析解讀完成！報告已載入。</span>");
+                
+            } catch (err) {
+                console.error("AI Analysis failed:", err);
+                if (aiReportContent) aiReportContent.innerHTML = `<span style="color: #f87171; font-weight: bold;">❌ AI 分析失敗：${err.message}</span>`;
+                alert(`❌ AI 分析失敗：${err.message}`);
+            } finally {
+                btnRunAi.disabled = false;
+                btnRunAi.textContent = "🤖 開始 AI 降維一鍵分析";
+            }
+        });
+    }
+}
+
+// 將勾選簡報拼接成時間拼圖大圖 (WebP)
+async function generateStoryboardGrid(checkedSlides) {
+    if (checkedSlides.length === 0) return null;
+    checkedSlides.sort((a, b) => a.slide_no - b.slide_no);
+    const count = checkedSlides.length;
+    
+    let cols = 3;
+    if (count <= 4) cols = 2;
+    else if (count <= 9) cols = 3;
+    else if (count <= 16) cols = 4;
+    else if (count <= 25) cols = 5;
+    else if (count <= 36) cols = 6;
+    else cols = Math.ceil(Math.sqrt(count));
+    
+    const rows = Math.ceil(count / cols);
+    const images = [];
+    
+    for (const slide of checkedSlides) {
+        try {
+            const img = await loadImageSafe(slide.url || slide.base64);
+            images.push(img);
+        } catch (e) {
+            console.error(`Failed to load slide ${slide.slide_no}:`, e);
+        }
+    }
+    
+    if (images.length === 0) return null;
+    
+    const subWidth = 480;
+    const subHeight = 270;
+    const gridCanvas = document.createElement("canvas");
+    gridCanvas.width = cols * subWidth;
+    gridCanvas.height = rows * subHeight;
+    const ctx = gridCanvas.getContext("2d");
+    
+    ctx.fillStyle = "#090d16";
+    ctx.fillRect(0, 0, gridCanvas.width, gridCanvas.height);
+    
+    for (let i = 0; i < images.length; i++) {
+        const c = i % cols;
+        const r = Math.floor(i / cols);
+        const x = c * subWidth;
+        const y = r * subHeight;
+        
+        ctx.drawImage(images[i], x + 4, y + 4, subWidth - 8, subHeight - 8);
+        
+        ctx.fillStyle = "rgba(15, 23, 42, 0.85)";
+        ctx.fillRect(x + 10, y + 10, 80, 24);
+        
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 10, y + 10, 80, 24);
+        
+        ctx.fillStyle = "#38bdf8";
+        ctx.font = "bold 11px Inter, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(`Page #${checkedSlides[i].slide_no}`, x + 50, y + 26);
+    }
+    
+    return gridCanvas.toDataURL("image/webp", 0.75);
+}
+
+// 瀏覽器本機直連 Gemini API 請求
+async function callGeminiDirect(apiKey, imageBase64, promptText, modelName = "gemini-1.5-flash") {
+    const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    const payload = {
+        contents: [
+            {
+                parts: [
+                    { text: promptText },
+                    {
+                        inlineData: {
+                            mimeType: "image/webp",
+                            data: cleanBase64
+                        }
+                    }
+                ]
+            }
+        ]
+    };
+    
+    const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`Gemini API 錯誤: ${err}`);
+    }
+    
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].text;
+}
+
+// 10. v3.html 歷史存檔上傳與反序列化解析 (v2.09)
+function handleUploadedFile(file) {
+    if (file.name.endsWith(".html") || file.type === "text/html") {
+        handleHtmlImport(file);
+    } else {
+        handleVideoFile(file);
+    }
+}
+
+async function handleHtmlImport(file) {
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+        const text = evt.target.result;
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, "text/html");
+        
+        // 抓出歷史投影片卡片
+        const cards = doc.querySelectorAll(".slide-card");
+        if (cards.length === 0) {
+            alert("⚠️ 無法識別此 HTML 檔案中的簡報影格！請確認是否為本系統導出的 v3.html 檔案。");
+            return;
+        }
+        
+        // 重置目前的投影片狀態與畫廊 DOM
+        slideCandidates = [];
+        if (galleryGrid) galleryGrid.innerHTML = "";
+        
+        // 試圖提取標題
+        const titleHeader = doc.querySelector("h1");
+        let parsedTitle = "已匯入簡報";
+        if (titleHeader) {
+            parsedTitle = titleHeader.textContent
+                .replace(" - AI Ingestion & Analysis Draft (v3.html)", "")
+                .replace(" - AI Ingestion & Analysis Draft (v3)", "")
+                .replace("🎬 ", "")
+                .trim();
+        }
+        taskTitleInput.value = parsedTitle;
+        
+        // 還原投影片對象列表
+        cards.forEach((card, idx) => {
+            const img = card.querySelector("img");
+            const memoTa = card.querySelector("textarea");
+            
+            const spans = card.querySelectorAll("span");
+            let pageNo = idx + 1;
+            let timestamp = "00:00:00";
+            
+            if (spans.length >= 2) {
+                const pageText = spans[0].textContent.replace("Page #", "");
+                pageNo = parseInt(pageText, 10) || (idx + 1);
+                timestamp = spans[1].textContent.replace("⏱️", "").replace("⏱", "").trim();
+            }
+            
+            const seconds = parseTimestamp(timestamp);
+            const base64Url = img ? img.getAttribute("src") : "";
+            const memoContent = memoTa ? memoTa.value || memoTa.textContent || "" : "";
+            
+            const slideItem = {
+                slide_no: pageNo,
+                timestamp: timestamp,
+                seconds: seconds,
+                url: base64Url,
+                base64: base64Url,
+                memo: memoContent
+            };
+            
+            slideCandidates.push(slideItem);
+            renderGalleryItem(slideItem);
+        });
+        
+        // 更新 UI 元件狀態
+        if (capturedCountBadge) capturedCountBadge.textContent = slideCandidates.length;
+        uploadCard.style.display = "none";
+        analysisCard.style.display = "block";
+        galleryCard.style.display = "block";
+        if (analysisLogConsole) {
+            analysisLogConsole.style.display = "block";
+        }
+        
+        // 開啟 AI 解讀側邊欄與雙欄佈局
+        const aiSidebar = document.getElementById("ai-sidebar");
+        if (aiSidebar) {
+            aiSidebar.style.display = "block";
+            document.querySelector(".main-layout").classList.add("has-ai-panel");
+        }
+        
+        addAnalysisLog(`🎉 成功自存檔 ${file.name} 匯入並還原 ${slideCandidates.length} 張投影片與歷史編輯備註！`);
+        alert(`🎉 還原成功！已成功載入 ${slideCandidates.length} 頁投影片。您現在可以直接進行二次編輯，或是啟動 AI 智能分析！`);
+    };
+    reader.readAsText(file);
+}
+
+
