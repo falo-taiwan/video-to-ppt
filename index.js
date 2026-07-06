@@ -1837,11 +1837,13 @@ function setupAiPanel() {
             } else {
                 geminiKeyWrapper.style.display = "none";
             }
+            updateCostEstimator();
         });
         
         if (aiModelSelect.value.startsWith("gemini_")) {
             geminiKeyWrapper.style.display = "block";
         }
+        updateCostEstimator();
     }
     
     if (geminiKeyInput) {
@@ -1925,6 +1927,12 @@ ${transcriptPrompt}`;
                         cfModelName = "@cf/meta/llama-3.1-70b-instruct";
                     } else if (modelVal === "builtin_gemma_26b") {
                         cfModelName = "@cf/google/gemma-4-26b-a4b-it";
+                    } else if (modelVal === "builtin_glm_4_flash") {
+                        cfModelName = "@cf/zhipuai/glm-4.7-flash";
+                    } else if (modelVal === "builtin_qwen_30b") {
+                        cfModelName = "@cf/qwen/qwen3-30b-a3b-fp8";
+                    } else if (modelVal === "builtin_deepseek_qwen_32b") {
+                        cfModelName = "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b";
                     }
                     
                     const res = await fetchWithAuth("/api/ai-analyze", {
@@ -2145,5 +2153,58 @@ async function handleHtmlImport(file) {
     };
     reader.readAsText(file);
 }
+
+// 11. 💵 AI 運行成本對比與估算 (v2.09)
+const modelCosts = {
+    "builtin_llama_70b": { name: "Llama 3.1 70B", price: 0.70, type: "Text" },
+    "builtin_deepseek_qwen_32b": { name: "DeepSeek R1 Qwen 32B", price: 0.35, type: "Text" },
+    "builtin_qwen_30b": { name: "Qwen3 30B", price: 0.30, type: "Text" },
+    "builtin_gemma_26b": { name: "Gemma-4 26B", price: 0.27, type: "Text" },
+    "builtin_llama_vision": { name: "Llama 3.2 Vision 11B", price: 0.15, type: "Vision" },
+    "builtin_glm_4_flash": { name: "GLM-4.7-Flash", price: 0.10, type: "Text" },
+    "gemini_3_5_flash": { name: "Gemini 3.5 Flash", price: 0.075, type: "Vision" },
+    "gemini_1_5_flash": { name: "Gemini 1.5 Flash", price: 0.075, type: "Vision" },
+    "gemini_2_0_flash": { name: "Gemini 2.0 Flash", price: 0.075, type: "Vision" },
+    "gemini_3_1_lite": { name: "Gemini 3.1 Flash-Lite", price: 0.0375, type: "Vision" },
+    "gemini_2_5_lite": { name: "Gemini 2.5 Flash-Lite", price: 0.0375, type: "Vision" }
+};
+
+function updateCostEstimator() {
+    const aiModelSelect = document.getElementById("ai-model-select");
+    const costPercentageText = document.getElementById("cost-percentage-text");
+    const costPerMillionText = document.getElementById("cost-per-million-text");
+    const costSavingText = document.getElementById("cost-saving-text");
+    const costEfficiencyBadge = document.getElementById("cost-efficiency-badge");
+    
+    if (!aiModelSelect) return;
+    const modelKey = aiModelSelect.value;
+    const info = modelCosts[modelKey] || { name: "Unknown", price: 0.70 };
+    
+    // 基準模型為 Llama 3.1 70B ($0.70 / 1M tokens)
+    const basePrice = 0.70;
+    const price = info.price;
+    const pct = (price / basePrice) * 100;
+    const savings = 100 - pct;
+    
+    if (costPercentageText) costPercentageText.textContent = `${pct.toFixed(1)}%`;
+    if (costPerMillionText) costPerMillionText.textContent = `$${price.toFixed(4)} USD`;
+    
+    if (costSavingText) {
+        if (modelKey === "builtin_llama_70b") {
+            costSavingText.textContent = "0.0% (基準)";
+            if (costEfficiencyBadge) {
+                costEfficiencyBadge.textContent = "100% (基準)";
+                costEfficiencyBadge.style.color = "var(--text-secondary)";
+            }
+        } else {
+            costSavingText.textContent = `${savings.toFixed(1)}%`;
+            if (costEfficiencyBadge) {
+                costEfficiencyBadge.textContent = `節省 ${savings.toFixed(1)}%`;
+                costEfficiencyBadge.style.color = "var(--accent-green)";
+            }
+        }
+    }
+}
+
 
 
