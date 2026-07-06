@@ -55,13 +55,19 @@ const btnLoadYt = document.getElementById("btn-load-yt");
 const btnDownloadYtVideo = document.getElementById("btn-download-yt-video");
 const ytLoadingStatus = document.getElementById("yt-loading-status");
 
-// 雲端 API 加密傳輸包裝函數 (v2.07)
 async function fetchWithAuth(url, options = {}) {
+    let targetUrl = url;
+    if (url.startsWith("/api/")) {
+        const isWorkerOrigin = window.location.hostname.includes("workers.dev");
+        if (!isWorkerOrigin) {
+            targetUrl = "https://video-to-ppt-serverless.force-chinese.workers.dev" + url;
+        }
+    }
     if (!options.headers) {
         options.headers = {};
     }
     options.headers["X-Auth-Password"] = "666666";
-    return fetch(url, options);
+    return fetch(targetUrl, options);
 }
 
 // 初始化
@@ -727,7 +733,8 @@ function setupYouTubeLoader() {
             analysisStatusText.textContent = `已成功解析 YouTube 影片: "${videoInfo.title}"`;
             
             // 3. 設定 video 的 src 指向 Workers CORS Proxy 代理影片流
-            const proxyUrl = `/api/yt-proxy?url=${encodeURIComponent(videoInfo.streamUrl)}`;
+            const apiBase = window.location.hostname.includes("workers.dev") ? "" : "https://video-to-ppt-serverless.force-chinese.workers.dev";
+            const proxyUrl = `${apiBase}/api/yt-proxy?url=${encodeURIComponent(videoInfo.streamUrl)}`;
             
             mainVideo.src = proxyUrl;
             mainVideo.load();
@@ -736,7 +743,7 @@ function setupYouTubeLoader() {
             if (btnDownloadYtVideo) {
                 btnDownloadYtVideo.style.display = "inline-block";
                 btnDownloadYtVideo.onclick = () => {
-                    window.open(`/api/yt-proxy?url=${encodeURIComponent(videoInfo.streamUrl)}&download=1`, "_blank");
+                    window.open(`${apiBase}/api/yt-proxy?url=${encodeURIComponent(videoInfo.streamUrl)}&download=1`, "_blank");
                 };
             }
 
