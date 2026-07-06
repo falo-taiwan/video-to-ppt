@@ -16,6 +16,17 @@ function formatTime(seconds) {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
+// 全局日誌輸出小幫手 (v2.07)
+function addAnalysisLog(text) {
+    const consoleEl = document.getElementById("analysis-log-console");
+    if (!consoleEl) return;
+    const timePrefix = new Date().toLocaleTimeString("zh-TW", { hour12: false });
+    const div = document.createElement("div");
+    div.innerHTML = `<span style="color: #64748b;">[${timePrefix}]</span> ${text}`;
+    consoleEl.appendChild(div);
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+
 // UI DOM Elements
 const dropZone = document.getElementById("drop-zone");
 const videoFileInput = document.getElementById("video-file-input");
@@ -188,16 +199,7 @@ async function startLocalAnalysis() {
         videoScanningOverlay.style.display = "block";
     }
 
-    // 日誌輸出小幫手
-    function addAnalysisLog(text) {
-        if (!analysisLogConsole) return;
-        const timePrefix = new Date().toLocaleTimeString("zh-TW", { hour12: false });
-        const div = document.createElement("div");
-        div.innerHTML = `<span style="color: #64748b;">[${timePrefix}]</span> ${text}`;
-        analysisLogConsole.appendChild(div);
-        analysisLogConsole.scrollTop = analysisLogConsole.scrollHeight;
-    }
-    
+
     // 取得分析參數
     const threshold = parseFloat(thresholdInput.value) || 15;
     const scanInterval = parseFloat(intervalInput.value) || 1.0;
