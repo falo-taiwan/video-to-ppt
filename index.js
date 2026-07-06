@@ -1,4 +1,7 @@
 // Frontend Scanner and Cloudflare API Connector - video_to_ppt_serverless
+// Copyright © 2026 Falo x Force Cheng. All rights reserved.
+// Version: v1.01 (2026/7/6)
+// WATERMARK: FALO_FORCECHENG_2026_07_06_V1.01
 
 let activeTaskId = null;
 let activeTaskData = null;
@@ -83,6 +86,13 @@ async function fetchWithAuth(url, options = {}) {
 
 // 初始化
 document.addEventListener("DOMContentLoaded", () => {
+    console.log(
+        "%c🎬 Video to PPT%c Copyright © 2026 Falo x Force Cheng. All rights reserved. | Version: v1.01 (2026/7/6)",
+        "color: #38bdf8; font-size: 16px; font-weight: bold;",
+        "color: #94a3b8; font-size: 12px;"
+    );
+    window.__FALO_WATERMARK__ = "Falo x Force Cheng 2026/7/6 v1.01";
+
     setupFileUpload();
     setupAnalysisControls();
     setupExportButtons();
@@ -510,6 +520,10 @@ async function exportToHTML() {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>投影片自動分析與擷取報告 - ${title}</title>
+    <meta name="author" content="Falo x Force Cheng">
+    <meta name="copyright" content="Falo x Force Cheng 2026/7/6 v1.01">
+    <!-- Hidden Watermark: Copyright Falo x Force Cheng 2026/7/6 v1.01 -->
+    <!-- COPYRIGHT_WATERMARK: FALO_FORCECHENG_2026_07_06_V1.01 -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
         body {
@@ -844,6 +858,11 @@ async function exportToHTML() {
         <div class="slides-container">
             ${galleryItemsHtml}
         </div>
+        
+        <footer style="text-align: center; padding: 24px; color: #64748b; font-size: 12px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 40px;">
+            <p>© 2026 Falo x Force Cheng. All rights reserved. | 版本: v1.01 (2026/7/6)</p>
+            <div style="display: none;" data-watermark="Falo x Force Cheng 2026/7/6 v1.01"></div>
+        </footer>
     </div>
     
     <div id="lightbox" onclick="this.style.display='none'">
@@ -865,6 +884,10 @@ async function exportToHTML() {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${title} - 離線簡報報告</title>
+    <meta name="author" content="Falo x Force Cheng">
+    <meta name="copyright" content="Falo x Force Cheng 2026/7/6 v1.01">
+    <!-- Hidden Watermark: Copyright Falo x Force Cheng 2026/7/6 v1.01 -->
+    <!-- COPYRIGHT_WATERMARK: FALO_FORCECHENG_2026_07_06_V1.01 -->
     <style>
         :root {
             --bg-primary: #0f172a;
@@ -959,6 +982,10 @@ async function exportToHTML() {
         <div class="gallery">
             ${galleryItemsHtml}
         </div>
+        <footer style="text-align: center; padding: 24px; color: var(--text-secondary); font-size: 12px; border-top: 1px solid var(--card-border); margin-top: 40px;">
+            <p>© 2026 Falo x Force Cheng. All rights reserved. | 版本: v1.01 (2026/7/6)</p>
+            <div style="display: none;" data-watermark="Falo x Force Cheng 2026/7/6 v1.01"></div>
+        </footer>
     </div>
     
     <div id="lightbox" onclick="this.style.display='none'">
